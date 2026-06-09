@@ -1,0 +1,135 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --panel-bg: #17151a;
+  --panel-fg: #d8d4da;
+  --panel-dim: #8b8492;
+  --accent: #ff4d5e;
+}
+
+html, body {
+  height: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: #0f0e11;
+}
+
+body {
+  display: flex;
+}
+
+#panel {
+  width: 280px;
+  flex: 0 0 280px;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  padding: 18px 16px 32px;
+  border-right: 1px solid #2a262e;
+}
+
+#panel h1 {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  color: var(--accent);
+}
+
+#panel section {
+  margin-bottom: 20px;
+}
+
+#panel h2 {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--panel-dim);
+  margin-bottom: 8px;
+  border-bottom: 1px solid #2a262e;
+  padding-bottom: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin: 7px 0;
+}
+
+.row > span:first-child {
+  flex: 0 0 88px;
+  color: var(--panel-fg);
+}
+
+.row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 0;
+}
+
+.row .val {
+  flex: 0 0 38px;
+  text-align: right;
+  color: var(--panel-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.row select,
+.row input[type="color"] {
+  flex: 1;
+  background: #221f26;
+  color: var(--panel-fg);
+  border: 1px solid #353039;
+  border-radius: 4px;
+  padding: 3px 4px;
+  font: inherit;
+  height: 26px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  flex: 1;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #221f26;
+  color: var(--panel-fg);
+  border: 1px solid #3a343f;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.actions button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--panel-dim);
+}
+
+#stage {
+  flex: 1;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#canvas {
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
+}
