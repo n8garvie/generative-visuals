@@ -8,7 +8,11 @@ a dusty-rose background.
 The regular dot grid produces moiré interference rings when the surface folds;
 the **jitter** slider trades that moiré for spray-paint grain; the **chroma
 offset** sliders produce red/blue fringing on the rims; **depth tint** zones
-the colors front-to-back.
+the colors front-to-back. Every dot stays pure red or pure blue — mid-tones
+are stochastically dithered so mixed regions read as vivid optical grey-blue
+rather than blended purple. **Grid ratio** thins one lattice direction into
+visible dotted rows (a woven look), and **gradient**/**grad angle** sweep the
+color balance directionally across the canvas.
 
 ## Run
 
@@ -21,11 +25,11 @@ python3 -m http.server 8000
 
 ## Controls
 
-- **Shape** — preset (Shell / Flower / Ellipse / Blob), lobes, amplitude,
-  twist, and per-axis stretch of the parametric surface.
+- **Shape** — preset (Shell / Flower / Ellipse / Mesh / Blob), lobes,
+  amplitude, twist, and per-axis stretch of the parametric surface.
 - **View** — rotation on three axes and zoom.
-- **Texture** — grid density, dot size/alpha, jitter (grain), chromatic
-  offset amount/angle, depth tint.
+- **Texture** — grid density and ratio, dot size/alpha, jitter (grain),
+  chromatic offset amount/angle, depth tint, directional gradient.
 - **Color** — front (red), back (blue), and background colors.
 - **Randomize** re-seeds and rolls new shape parameters; **Export PNG**
   downloads the canvas at full resolution (1000×1250).

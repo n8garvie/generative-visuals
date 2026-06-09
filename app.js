@@ -38,38 +38,47 @@
     { key: 'zoom', label: 'Zoom', min: 0.3, max: 2.5, step: 0.01, def: 1.1, group: 'view' },
 
     { key: 'density', label: 'Density', min: 80, max: 700, step: 10, def: 520, group: 'texture' },
+    { key: 'gridRatio', label: 'Grid ratio', min: 0.25, max: 4, step: 0.05, def: 1, group: 'texture' },
     { key: 'dotSize', label: 'Dot size', min: 0.5, max: 3, step: 0.1, def: 1.4, group: 'texture' },
-    { key: 'dotAlpha', label: 'Dot alpha', min: 0.05, max: 1, step: 0.01, def: 0.6, group: 'texture' },
+    { key: 'dotAlpha', label: 'Dot alpha', min: 0.05, max: 1, step: 0.01, def: 0.75, group: 'texture' },
     { key: 'jitter', label: 'Jitter', min: 0, max: 8, step: 0.05, def: 0.4, group: 'texture' },
     { key: 'chromaOff', label: 'Chroma off', min: 0, max: 14, step: 0.1, def: 5, group: 'texture' },
     { key: 'chromaAngle', label: 'Chroma ang', min: 0, max: 360, step: 1, def: 200, group: 'texture' },
     { key: 'depthTint', label: 'Depth tint', min: 0, max: 1, step: 0.01, def: 0.7, group: 'texture' },
+    { key: 'gradAmt', label: 'Gradient', min: 0, max: 1.5, step: 0.01, def: 0, group: 'texture' },
+    { key: 'gradAngle', label: 'Grad angle', min: 0, max: 360, step: 1, def: 90, group: 'texture' },
   ];
 
   const PRESETS = {
     shell: {
       lobesU: 1, lobesV: 3, amp: 0.9, twist: 1.4, sx: 1, sy: 1, sz: 1,
       rotX: -40, rotY: 60, rotZ: 15, zoom: 1,
-      density: 560, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.3,
-      chromaOff: 4, chromaAngle: 200, depthTint: 0.5,
+      density: 700, gridRatio: 1.8, dotSize: 1.15, dotAlpha: 0.8, jitter: 0.2,
+      chromaOff: 3, chromaAngle: 200, depthTint: 0.6, gradAmt: 0, gradAngle: 90,
     },
     flower: {
       lobesU: 5, lobesV: 3, amp: 0.4, twist: 0.6, sx: 1, sy: 1, sz: 1,
       rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15,
-      density: 560, dotSize: 1.3, dotAlpha: 0.55, jitter: 0.3,
-      chromaOff: 4, chromaAngle: 150, depthTint: 0.8,
+      density: 600, gridRatio: 1.8, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.2,
+      chromaOff: 3, chromaAngle: 150, depthTint: 0.7, gradAmt: 0, gradAngle: 90,
     },
     ellipse: {
       lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.5, sy: 0.35, sz: 1.45,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
-      density: 620, dotSize: 1.4, dotAlpha: 0.5, jitter: 2.6,
-      chromaOff: 7, chromaAngle: 160, depthTint: 0.15,
+      density: 640, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
+      chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
+    },
+    mesh: {
+      lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
+      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
+      density: 600, gridRatio: 1, dotSize: 0.9, dotAlpha: 0.55, jitter: 0,
+      chromaOff: 9, chromaAngle: 250, depthTint: 0.25, gradAmt: 0.6, gradAngle: 100,
     },
     blob: {
       lobesU: 2, lobesV: 2, amp: 0.3, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
       rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1,
-      density: 520, dotSize: 1.5, dotAlpha: 0.55, jitter: 1,
-      chromaOff: 6, chromaAngle: 60, depthTint: 0.45,
+      density: 560, gridRatio: 1.5, dotSize: 1.3, dotAlpha: 0.6, jitter: 1,
+      chromaOff: 6, chromaAngle: 60, depthTint: 0.45, gradAmt: 0.3, gradAngle: 0,
     },
   };
 
@@ -89,19 +98,6 @@
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  }
-
-  function hexToRgb(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-
-  function mixRgb(a, b, t) {
-    return [
-      Math.round(a[0] + (b[0] - a[0]) * t),
-      Math.round(a[1] + (b[1] - a[1]) * t),
-      Math.round(a[2] + (b[2] - a[2]) * t),
-    ];
   }
 
   // ------------------------------------------------------------------- UI
@@ -181,7 +177,8 @@
 
     const dens = preview ? Math.max(60, Math.round(p.density * 0.45)) : p.density;
     const nu = dens;
-    const nv = Math.round(dens * 0.75);
+    // gridRatio > 1 thins the v sampling, leaving visible dotted rows.
+    const nv = Math.max(20, Math.round((dens * 0.75) / p.gridRatio));
     const n = nu * nv;
 
     const cx = W / 2;
@@ -232,14 +229,18 @@
     }
     const dRange = Math.max(dMax - dMin, 1e-6);
 
-    // Pass 2: bucket dots by color so fillStyle changes stay cheap. Both
-    // color passes share one A->B palette: pass 1 leans toward colorA
-    // (front/red), pass 2 toward colorB (back/blue), with depthTint pulling
-    // both toward pure depth zoning.
-    const NB = 24;
-    const buckets = Array.from({ length: NB }, () => []);
+    // Pass 2: every dot stays PURE colorA or colorB — mid-tones come from
+    // stochastic dithering (probability of B rises toward the back and along
+    // the gradient direction), so mixed regions read as vivid optical
+    // grey-blue instead of muddy blended purple. Pass 1 leans toward colorA
+    // (front), the chroma-offset pass 2 toward colorB (back).
+    const posA = [];
+    const posB = [];
     const ox = Math.cos((p.chromaAngle * Math.PI) / 180) * p.chromaOff;
     const oy = Math.sin((p.chromaAngle * Math.PI) / 180) * p.chromaOff;
+    const ga = (p.gradAngle * Math.PI) / 180;
+    const gx = (Math.cos(ga) * p.gradAmt) / (2 * scale);
+    const gy = (Math.sin(ga) * p.gradAmt) / (2 * scale);
     const jit = p.jitter;
 
     for (let k = 0; k < n; k++) {
@@ -249,27 +250,20 @@
       const y = pts[k * 3 + 1] + jy;
       const t = 1 - (pts[k * 3 + 2] - dMin) / dRange; // 1 = front, 0 = back
 
-      const f1 = p.depthTint * (1 - t);
-      const f2 = 1 - p.depthTint * t;
-      buckets[Math.round(f1 * (NB - 1))].push(x, y);
-      buckets[Math.round(f2 * (NB - 1))].push(x + ox, y + oy);
+      const g = (x - cx) * gx + (y - cy) * gy;
+      const f1 = p.depthTint * (1 - t) + g;
+      const f2 = 1 - p.depthTint * t + g;
+      (rnd() < f1 ? posB : posA).push(x, y);
+      (rnd() < f2 ? posB : posA).push(x + ox, y + oy);
     }
 
-    const colA = hexToRgb($('colorA').value);
-    const colB = hexToRgb($('colorB').value);
     const s = p.dotSize;
     ctx.globalAlpha = p.dotAlpha;
-
-    // Draw blue-most buckets first so the red layer sits on top.
-    for (let b = NB - 1; b >= 0; b--) {
-      const pos = buckets[b];
-      if (!pos.length) continue;
-      const [r, g, bl] = mixRgb(colA, colB, b / (NB - 1));
-      ctx.fillStyle = `rgb(${r},${g},${bl})`;
-      for (let j = 0; j < pos.length; j += 2) {
-        ctx.fillRect(pos[j], pos[j + 1], s, s);
-      }
-    }
+    // colorB underneath, colorA (front/red) on top.
+    ctx.fillStyle = $('colorB').value;
+    for (let j = 0; j < posB.length; j += 2) ctx.fillRect(posB[j], posB[j + 1], s, s);
+    ctx.fillStyle = $('colorA').value;
+    for (let j = 0; j < posA.length; j += 2) ctx.fillRect(posA[j], posA[j + 1], s, s);
     ctx.globalAlpha = 1;
   }
 
@@ -298,9 +292,12 @@
       rotY: ri(-90, 90),
       rotZ: ri(-90, 90),
       jitter: rf(0, 3),
+      gridRatio: rf(0.5, 3),
       chromaOff: rf(2, 10, 1),
       chromaAngle: ri(0, 360),
       depthTint: rf(0.1, 0.9),
+      gradAmt: rf(0, 0.8),
+      gradAngle: ri(0, 360),
     });
     syncUI();
     scheduleRender(false);
