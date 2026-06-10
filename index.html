@@ -28,6 +28,15 @@
   <section>
     <h2>View</h2>
     <div id="view-controls"></div>
+    <label class="row">
+      <span>Mirror</span>
+      <select id="mirror">
+        <option value="off">Off</option>
+        <option value="x">Flip X</option>
+        <option value="y">Flip Y</option>
+        <option value="quad">Kaleido</option>
+      </select>
+    </label>
   </section>
 
   <section>
@@ -48,6 +57,7 @@
     <h2>Color</h2>
     <label class="row"><span>Front / red</span><input type="color" id="colorA" value="#ff2435"></label>
     <label class="row"><span>Back / blue</span><input type="color" id="colorB" value="#2244ee"></label>
+    <label class="row"><span>Sparkle accent</span><input type="color" id="colorC" value="#ffe45c"></label>
     <label class="row"><span>Background</span><input type="color" id="colorBg" value="#cdb7ba"></label>
   </section>
 

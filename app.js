@@ -22,6 +22,13 @@
   canvas.width = W;
   canvas.height = H;
 
+  // Shapes are drawn to an offscreen layer, then composited (and optionally
+  // mirrored) over the background.
+  const off = document.createElement('canvas');
+  off.width = W;
+  off.height = H;
+  const offCtx = off.getContext('2d');
+
   // ---------------------------------------------------------------- params
 
   const PARAM_DEFS = [
@@ -53,41 +60,42 @@
     { key: 'depthTint', label: 'Depth tint', min: 0, max: 1, step: 0.01, def: 0.7, group: 'texture' },
     { key: 'gradAmt', label: 'Gradient', min: 0, max: 1.5, step: 0.01, def: 0, group: 'texture' },
     { key: 'gradAngle', label: 'Grad angle', min: 0, max: 360, step: 1, def: 90, group: 'texture' },
+    { key: 'sparkle', label: 'Sparkle', min: 0, max: 0.1, step: 0.002, def: 0, group: 'texture' },
   ];
 
   const PRESETS = {
     shell: {
       lobesU: 1, lobesV: 3, amp: 0.9, twist: 1.4, sx: 1, sy: 1, sz: 1,
       rotX: -40, rotY: 60, rotZ: 15, zoom: 1,
-      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 700, gridRatio: 1.8, dotSize: 1.15, dotAlpha: 0.8, jitter: 0.2,
       chromaOff: 3, chromaAngle: 200, depthTint: 0.6, gradAmt: 0, gradAngle: 90,
     },
     flower: {
       lobesU: 5, lobesV: 3, amp: 0.4, twist: 0.6, sx: 1, sy: 1, sz: 1,
       rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15,
-      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0.02, mirror: 'off',
       density: 600, gridRatio: 1.8, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.2,
       chromaOff: 3, chromaAngle: 150, depthTint: 0.7, gradAmt: 0, gradAngle: 90,
     },
     ellipse: {
       lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35,
-      copies: 3, spread: 0.31, rotStep: 0, scaleStep: 1.05, alternate: true,
+      copies: 3, spread: 0.31, rotStep: 0, scaleStep: 1.05, alternate: true, sparkle: 0, mirror: 'off',
       density: 540, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
       chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
     },
     mesh: {
       lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
-      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 600, gridRatio: 1, dotSize: 0.9, dotAlpha: 0.55, jitter: 0,
       chromaOff: 9, chromaAngle: 250, depthTint: 0.25, gradAmt: 0.6, gradAngle: 100,
     },
     blob: {
       lobesU: 2, lobesV: 2, amp: 0.3, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
       rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1,
-      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 560, gridRatio: 1.5, dotSize: 1.3, dotAlpha: 0.6, jitter: 1,
       chromaOff: 6, chromaAngle: 60, depthTint: 0.45, gradAmt: 0.3, gradAngle: 0,
     },
@@ -179,9 +187,9 @@
     });
   }
 
-  // Draws one surface instance. colA is the front/top color, colB the
-  // offset back color.
-  function drawSurface(p, rnd, preview, cx, rotY, zoom, colA, colB) {
+  // Draws one surface instance onto g. colA is the front/top color, colB the
+  // offset back color. mod carries transient drift modulation.
+  function drawSurface(g, p, rnd, preview, cx, rotY, zoom, colA, colB, mod) {
     const dens = preview ? Math.max(60, Math.round(p.density * 0.45)) : p.density;
     const nu = dens;
     // gridRatio > 1 thins the v sampling, leaving visible dotted rows.
@@ -242,12 +250,15 @@
     // (front), the chroma-offset pass 2 toward colorB (back).
     const posA = [];
     const posB = [];
-    const ox = Math.cos((p.chromaAngle * Math.PI) / 180) * p.chromaOff;
-    const oy = Math.sin((p.chromaAngle * Math.PI) / 180) * p.chromaOff;
+    const posC = []; // rare accent-color dots
+    const chroma = p.chromaOff * (mod.chromaMul ?? 1);
+    const ox = Math.cos((p.chromaAngle * Math.PI) / 180) * chroma;
+    const oy = Math.sin((p.chromaAngle * Math.PI) / 180) * chroma;
     const ga = (p.gradAngle * Math.PI) / 180;
     const gx = (Math.cos(ga) * p.gradAmt) / (2 * scale);
     const gy = (Math.sin(ga) * p.gradAmt) / (2 * scale);
-    const jit = p.jitter;
+    const jit = p.jitter + (mod.jitterAdd ?? 0);
+    const spk = p.sparkle;
 
     for (let k = 0; k < n; k++) {
       const jx = jit ? (rnd() + rnd() + rnd() - 1.5) * jit : 0;
@@ -256,30 +267,34 @@
       const y = pts[k * 3 + 1] + jy;
       const t = 1 - (pts[k * 3 + 2] - dMin) / dRange; // 1 = front, 0 = back
 
-      const g = (x - cx) * gx + (y - cy) * gy;
-      const f1 = p.depthTint * (1 - t) + g;
-      const f2 = 1 - p.depthTint * t + g;
-      (rnd() < f1 ? posB : posA).push(x, y);
+      const gr = (x - cx) * gx + (y - cy) * gy;
+      const f1 = p.depthTint * (1 - t) + gr;
+      const f2 = 1 - p.depthTint * t + gr;
+      if (spk && rnd() < spk) posC.push(x, y);
+      else (rnd() < f1 ? posB : posA).push(x, y);
       (rnd() < f2 ? posB : posA).push(x + ox, y + oy);
     }
 
     const s = p.dotSize;
-    ctx.globalAlpha = p.dotAlpha;
-    // colB underneath, colA (front) on top.
-    ctx.fillStyle = colB;
-    for (let j = 0; j < posB.length; j += 2) ctx.fillRect(posB[j], posB[j + 1], s, s);
-    ctx.fillStyle = colA;
-    for (let j = 0; j < posA.length; j += 2) ctx.fillRect(posA[j], posA[j + 1], s, s);
-    ctx.globalAlpha = 1;
+    g.globalAlpha = p.dotAlpha;
+    // colB underneath, colA (front) on top, accent sparkle above both.
+    g.fillStyle = colB;
+    for (let j = 0; j < posB.length; j += 2) g.fillRect(posB[j], posB[j + 1], s, s);
+    g.fillStyle = colA;
+    for (let j = 0; j < posA.length; j += 2) g.fillRect(posA[j], posA[j + 1], s, s);
+    if (posC.length) {
+      g.globalAlpha = Math.min(1, p.dotAlpha * 1.5);
+      g.fillStyle = $('colorC').value;
+      for (let j = 0; j < posC.length; j += 2) g.fillRect(posC[j], posC[j + 1], s, s);
+    }
+    g.globalAlpha = 1;
   }
 
-  function render(preview) {
+  function render(preview, mod = {}) {
     const p = state.params;
     const rnd = mulberry32(state.seed);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = $('colorBg').value;
-    ctx.fillRect(0, 0, W, H);
+    offCtx.clearRect(0, 0, W, H);
 
     const copies = Math.round(p.copies);
     const alternate = $('alternate').checked;
@@ -291,13 +306,42 @@
       const rotY = p.rotY + p.rotStep * c;
       const zoom = p.zoom * Math.pow(p.scaleStep, c);
       const swap = alternate && c % 2 === 1;
-      drawSurface(p, rnd, preview, cx, rotY, zoom, swap ? colB : colA, swap ? colA : colB);
+      drawSurface(offCtx, p, rnd, preview, cx, rotY, zoom, swap ? colB : colA, swap ? colA : colB, mod);
+    }
+
+    // Composite the shape layer over the background, with optional mirrors.
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = $('colorBg').value;
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(off, 0, 0);
+    const mirror = $('mirror').value;
+    if (mirror === 'x' || mirror === 'quad') {
+      ctx.save();
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(off, 0, 0);
+      ctx.restore();
+    }
+    if (mirror === 'y' || mirror === 'quad') {
+      ctx.save();
+      ctx.translate(0, H);
+      ctx.scale(1, -1);
+      ctx.drawImage(off, 0, 0);
+      ctx.restore();
+    }
+    if (mirror === 'quad') {
+      ctx.save();
+      ctx.translate(W, H);
+      ctx.scale(-1, -1);
+      ctx.drawImage(off, 0, 0);
+      ctx.restore();
     }
   }
 
   // ---------------------------------------------------------------- drift
 
   let drifting = false;
+  let driftPhase = 0;
 
   function driftLoop() {
     if (!drifting) return;
@@ -306,7 +350,13 @@
     state.params.rotY = v;
     sliderEls.rotY.input.value = v;
     sliderEls.rotY.val.textContent = v.toFixed(0);
-    render(true);
+    // The texture "breathes": jitter and chroma offset oscillate at
+    // incommensurate rates so the loop never visibly repeats.
+    driftPhase += 0.016;
+    render(true, {
+      jitterAdd: (1 - Math.cos(driftPhase * 0.9)) * 1.1,
+      chromaMul: 1 + 0.6 * Math.sin(driftPhase * 0.57),
+    });
     requestAnimationFrame(driftLoop);
   }
 
@@ -320,9 +370,10 @@
   // -------------------------------------------------------------- actions
 
   function applyPreset(name) {
-    const { alternate, ...params } = PRESETS[name];
+    const { alternate, mirror, ...params } = PRESETS[name];
     Object.assign(state.params, params);
     $('alternate').checked = alternate;
+    $('mirror').value = mirror;
     syncUI();
     scheduleRender(false);
   }
@@ -351,6 +402,7 @@
       depthTint: rf(0.1, 0.9),
       gradAmt: rf(0, 0.8),
       gradAngle: ri(0, 360),
+      sparkle: rnd() < 0.4 ? rf(0.004, 0.04, 3) : 0,
     });
     syncUI();
     scheduleRender(false);
@@ -377,7 +429,8 @@
   $('export').addEventListener('click', exportPng);
   $('drift').addEventListener('click', () => setDrift(!drifting));
   $('alternate').addEventListener('change', () => scheduleRender(false));
-  for (const id of ['colorA', 'colorB', 'colorBg']) {
+  $('mirror').addEventListener('change', () => scheduleRender(false));
+  for (const id of ['colorA', 'colorB', 'colorC', 'colorBg']) {
     $(id).addEventListener('input', () => scheduleRender(true));
     $(id).addEventListener('change', () => scheduleRender(false));
   }
