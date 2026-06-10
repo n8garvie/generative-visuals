@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/lava-lamp-animation-export-qpdjt4]
+    branches: [main, claude/dashboard-slider-canvas-drpm4b]
   workflow_dispatch:
 
 permissions:
