@@ -6,6 +6,13 @@
  * moiré interference rings; per-dot jitter trades the moiré for grain; the
  * pass offset produces chromatic fringing on the rims. The Copies group
  * repeats the surface with per-copy rotation/scale/color variation.
+ *
+ * Animation: a lava-lamp loop plays by default. Every modulation (a wave
+ * traveling around the surface, rotation sway, amplitude/zoom breathing,
+ * jitter/chroma shimmer) is a periodic function of a single phase that runs
+ * 0..2π over one loop, so the loop is seamless and all mods are the identity
+ * at phase 0. Loops export as GIF (offline, full density, via gif.js) or
+ * WebM (realtime MediaRecorder capture).
  */
 
 (() => {
@@ -61,6 +68,11 @@
     { key: 'gradAmt', label: 'Gradient', min: 0, max: 1.5, step: 0.01, def: 0, group: 'texture' },
     { key: 'gradAngle', label: 'Grad angle', min: 0, max: 360, step: 1, def: 90, group: 'texture' },
     { key: 'sparkle', label: 'Sparkle', min: 0, max: 0.1, step: 0.002, def: 0, group: 'texture' },
+
+    { key: 'loopSec', label: 'Loop (sec)', min: 1, max: 30, step: 0.5, def: 5, group: 'anim' },
+    { key: 'morph', label: 'Morph', min: 0, max: 1, step: 0.01, def: 0.6, group: 'anim' },
+    { key: 'sway', label: 'Sway', min: 0, max: 30, step: 0.5, def: 6, group: 'anim' },
+    { key: 'breathe', label: 'Breathe', min: 0, max: 0.3, step: 0.005, def: 0.08, group: 'anim' },
   ];
 
   const PRESETS = {
@@ -129,6 +141,7 @@
       view: $('view-controls'),
       copies: $('copies-controls'),
       texture: $('texture-controls'),
+      anim: $('anim-controls'),
     };
     for (const def of PARAM_DEFS) {
       const row = document.createElement('label');
@@ -175,6 +188,7 @@
   let pendingPreview = false;
 
   function scheduleRender(preview) {
+    if (playing || exporting) return; // the animation/export loop owns the canvas
     // A queued full render must not be downgraded by a later preview request.
     pendingPreview = rafPending ? pendingPreview && preview : preview;
     if (rafPending) return;
@@ -183,12 +197,12 @@
       rafPending = false;
       const preview_ = pendingPreview;
       pendingPreview = false;
-      render(preview_);
+      render(preview_, animMod(phase));
     });
   }
 
   // Draws one surface instance onto g. colA is the front/top color, colB the
-  // offset back color. mod carries transient drift modulation.
+  // offset back color. mod carries the animation-loop modulation (see animMod).
   function drawSurface(g, p, rnd, preview, cx, rotY, zoom, colA, colB, mod) {
     const dens = preview ? Math.max(60, Math.round(p.density * 0.45)) : p.density;
     const nu = dens;
@@ -200,7 +214,11 @@
     const scale = Math.min(W, H) * 0.31 * zoom;
     const persp = 5;
 
-    const ax = (p.rotX * Math.PI) / 180;
+    const ph = mod.phase ?? 0;
+    const morph = mod.morph ?? 0;
+    const ampl = p.amp * (mod.ampMul ?? 1);
+
+    const ax = ((p.rotX + (mod.swayX ?? 0)) * Math.PI) / 180;
     const ay = (rotY * Math.PI) / 180;
     const az = (p.rotZ * Math.PI) / 180;
     const cxr = Math.cos(ax), sxr = Math.sin(ax);
@@ -218,7 +236,14 @@
         const v = (iv / (nv - 1)) * Math.PI;
         const sv = Math.sin(v);
 
-        const r = 1 + p.amp * Math.sin(p.lobesU * u + p.twist * v) * Math.sin(p.lobesV * v);
+        // Morph crossfades the lobe wave toward a copy whose phase travels a
+        // full 2π over one loop, so the lobes flow around the surface like
+        // rising lava and land exactly back on the static shape.
+        const base = p.lobesU * u + p.twist * v;
+        const wave = morph
+          ? (1 - morph) * Math.sin(base) + morph * Math.sin(base - ph)
+          : Math.sin(base);
+        const r = 1 + ampl * wave * Math.sin(p.lobesV * v);
         const x = r * p.sx * sv * Math.cos(u);
         const y = r * p.sy * sv * Math.sin(u);
         const z = r * p.sz * Math.cos(v);
@@ -261,8 +286,11 @@
     const spk = p.sparkle;
 
     for (let k = 0; k < n; k++) {
-      const jx = jit ? (rnd() + rnd() + rnd() - 1.5) * jit : 0;
-      const jy = jit ? (rnd() + rnd() + rnd() - 1.5) * jit : 0;
+      // rnd is always consumed (even at jit 0) so every animation frame sees
+      // the same per-dot random stream — otherwise the dither pattern would
+      // pop on frames where the animated jitter crosses zero.
+      const jx = (rnd() + rnd() + rnd() - 1.5) * jit;
+      const jy = (rnd() + rnd() + rnd() - 1.5) * jit;
       const x = pts[k * 3] + jx;
       const y = pts[k * 3 + 1] + jy;
       const t = 1 - (pts[k * 3 + 2] - dMin) / dRange; // 1 = front, 0 = back
@@ -303,8 +331,8 @@
 
     for (let c = 0; c < copies; c++) {
       const cx = W / 2 + (c - (copies - 1) / 2) * p.spread * W;
-      const rotY = p.rotY + p.rotStep * c;
-      const zoom = p.zoom * Math.pow(p.scaleStep, c);
+      const rotY = p.rotY + (mod.swayY ?? 0) + p.rotStep * c;
+      const zoom = p.zoom * (mod.zoomMul ?? 1) * Math.pow(p.scaleStep, c);
       const swap = alternate && c % 2 === 1;
       drawSurface(offCtx, p, rnd, preview, cx, rotY, zoom, swap ? colB : colA, swap ? colA : colB, mod);
     }
@@ -338,33 +366,49 @@
     }
   }
 
-  // ---------------------------------------------------------------- drift
+  // ------------------------------------------------------------- animation
 
-  let drifting = false;
-  let driftPhase = 0;
+  let playing = false;
+  let exporting = false;
+  let phase = 0; // current loop phase, 0..TAU
+  let lastTick = 0;
 
-  function driftLoop() {
-    if (!drifting) return;
-    let v = state.params.rotY + 0.25;
-    if (v > 180) v -= 360;
-    state.params.rotY = v;
-    sliderEls.rotY.input.value = v;
-    sliderEls.rotY.val.textContent = v.toFixed(0);
-    // The texture "breathes": jitter and chroma offset oscillate at
-    // incommensurate rates so the loop never visibly repeats.
-    driftPhase += 0.016;
-    render(true, {
-      jitterAdd: (1 - Math.cos(driftPhase * 0.9)) * 1.1,
-      chromaMul: 1 + 0.6 * Math.sin(driftPhase * 0.57),
-    });
-    requestAnimationFrame(driftLoop);
+  // All modulations are periodic in phase and the identity at phase 0, so a
+  // paused-at-zero frame matches the static render and the loop is seamless.
+  function animMod(ph) {
+    const p = state.params;
+    return {
+      phase: ph,
+      morph: p.morph,
+      ampMul: 1 + p.breathe * Math.sin(ph),
+      zoomMul: 1 - 0.3 * p.breathe * Math.sin(ph),
+      swayX: p.sway * Math.sin(ph),
+      swayY: p.sway * 0.7 * (1 - Math.cos(ph)),
+      jitterAdd: 5 * p.breathe * (1 - Math.cos(ph)),
+      chromaMul: 1 + 4 * p.breathe * Math.sin(2 * ph),
+    };
   }
 
-  function setDrift(on) {
-    drifting = on;
-    $('drift').classList.toggle('on', on);
-    if (on) driftLoop();
-    else scheduleRender(false);
+  function tick(now) {
+    if (!playing) return;
+    phase = (phase + ((now - lastTick) / (state.params.loopSec * 1000)) * TAU) % TAU;
+    lastTick = now;
+    render(true, animMod(phase));
+    requestAnimationFrame(tick);
+  }
+
+  function setPlaying(on) {
+    if (exporting) return;
+    playing = on;
+    const btn = $('play');
+    btn.classList.toggle('on', on);
+    btn.textContent = on ? 'Pause' : 'Play';
+    if (on) {
+      lastTick = performance.now();
+      requestAnimationFrame(tick);
+    } else {
+      scheduleRender(false); // full-quality frame, frozen at the current phase
+    }
   }
 
   // -------------------------------------------------------------- actions
@@ -408,26 +452,109 @@
     scheduleRender(false);
   }
 
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function setStatus(msg) {
+    $('status').textContent = msg;
+  }
+
   function exportPng() {
-    render(false);
-    canvas.toBlob((blob) => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `visual-${Date.now()}.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
+    if (exporting) return;
+    render(false, animMod(phase));
+    canvas.toBlob((blob) => download(blob, `visual-${Date.now()}.png`));
+  }
+
+  // Renders every frame of one loop offline at full density, half resolution
+  // (500×625), 20 fps, and encodes with gif.js. Deterministic and seamless.
+  async function exportGif() {
+    if (exporting) return;
+    exporting = true;
+    const wasPlaying = playing;
+    playing = false;
+    const fps = 20; // GIF frame delay of exactly 5 centiseconds
+    const frames = Math.max(4, Math.round(state.params.loopSec * fps));
+    const gw = W / 2;
+    const gh = H / 2;
+    const gifCanvas = document.createElement('canvas');
+    gifCanvas.width = gw;
+    gifCanvas.height = gh;
+    const gctx = gifCanvas.getContext('2d', { willReadFrequently: true });
+    const enc = createGifEncoder(gw, gh, 100 / fps);
+    try {
+      for (let f = 0; f < frames; f++) {
+        setStatus(`GIF: rendering frame ${f + 1}/${frames}…`);
+        render(false, animMod((f / frames) * TAU));
+        gctx.drawImage(canvas, 0, 0, gw, gh);
+        enc.addFrame(gctx.getImageData(0, 0, gw, gh).data);
+        await new Promise((r) => setTimeout(r, 0)); // let the UI update
+      }
+      download(enc.finish(), `visual-${Date.now()}.gif`);
+    } finally {
+      setStatus('');
+      exporting = false;
+      if (wasPlaying) setPlaying(true);
+      else scheduleRender(false);
+    }
+  }
+
+  // Records exactly one loop of the live animation in real time via
+  // MediaRecorder, starting from the current phase so the file is seamless.
+  function exportVideo() {
+    if (exporting) return;
+    if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+      setStatus('Video export is not supported in this browser.');
+      return;
+    }
+    exporting = true;
+    const wasPlaying = playing;
+    playing = false;
+    const loopMs = state.params.loopSec * 1000;
+    const stream = canvas.captureStream(30);
+    const mime = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4']
+      .find((m) => MediaRecorder.isTypeSupported(m)) || '';
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 12e6 } : undefined);
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      const ext = rec.mimeType.includes('mp4') ? 'mp4' : 'webm';
+      download(new Blob(chunks, { type: rec.mimeType }), `visual-${Date.now()}.${ext}`);
+      setStatus('');
+      exporting = false;
+      if (wasPlaying) setPlaying(true);
+      else scheduleRender(false);
+    };
+    rec.start();
+    const t0 = performance.now();
+    const vloop = (now) => {
+      const elapsed = now - t0;
+      if (elapsed >= loopMs) {
+        rec.stop();
+        return;
+      }
+      setStatus(`Recording: ${(elapsed / 1000).toFixed(1)} / ${state.params.loopSec}s`);
+      render(true, animMod((phase + (elapsed / loopMs) * TAU) % TAU));
+      requestAnimationFrame(vloop);
+    };
+    requestAnimationFrame(vloop);
   }
 
   // ----------------------------------------------------------------- init
 
   buildSliders();
   // Console/scripting access: studio.state.params, studio.render(), etc.
-  window.studio = { state, render: () => scheduleRender(false), syncUI, applyPreset, randomize, setDrift };
+  window.studio = { state, render: () => scheduleRender(false), syncUI, applyPreset, randomize, setPlaying, exportGif, exportVideo };
   $('preset').addEventListener('change', (e) => applyPreset(e.target.value));
   $('randomize').addEventListener('click', randomize);
   $('export').addEventListener('click', exportPng);
-  $('drift').addEventListener('click', () => setDrift(!drifting));
+  $('export-gif').addEventListener('click', exportGif);
+  $('export-video').addEventListener('click', exportVideo);
+  $('play').addEventListener('click', () => setPlaying(!playing));
   $('alternate').addEventListener('change', () => scheduleRender(false));
   $('mirror').addEventListener('change', () => scheduleRender(false));
   for (const id of ['colorA', 'colorB', 'colorC', 'colorBg']) {
@@ -436,4 +563,5 @@
   }
 
   applyPreset($('preset').value);
+  setPlaying(true); // the lava-lamp loop plays by default
 })();

@@ -177,6 +177,12 @@ body {
   color: var(--panel-dim);
 }
 
+#status {
+  min-height: 17px;
+  margin: 10px 0 6px;
+  color: var(--accent);
+}
+
 #stage {
   flex: 1;
   height: 100vh;
