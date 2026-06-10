@@ -40,6 +40,11 @@
   </section>
 
   <section>
+    <h2>Animation</h2>
+    <div id="anim-controls"></div>
+  </section>
+
+  <section>
     <h2>Copies</h2>
     <div id="copies-controls"></div>
     <label class="row toggle">
@@ -62,11 +67,14 @@
   </section>
 
   <section class="actions">
+    <button id="play">Pause</button>
     <button id="randomize">Randomize</button>
-    <button id="drift">Drift</button>
     <button id="export">Export PNG</button>
+    <button id="export-gif">Export GIF</button>
+    <button id="export-video">Export Video</button>
   </section>
 
+  <p id="status" class="hint" aria-live="polite"></p>
   <p class="hint">Tip: jitter 0 gives crisp moiré mesh, high jitter gives spray-paint grain.</p>
 </aside>
 
@@ -74,6 +82,7 @@
   <canvas id="canvas"></canvas>
 </main>
 
+<script src="gif.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

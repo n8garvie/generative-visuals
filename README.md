@@ -29,6 +29,11 @@ python3 -m http.server 8000
   amplitude, twist, and per-axis stretch of the parametric surface.
 - **View** — rotation on three axes, zoom, and a mirror mode
   (Flip X / Flip Y / Kaleido) that reflects the composition.
+- **Animation** — a lava-lamp style loop plays by default. **Loop (sec)**
+  sets the loop length (default 5 s), **Morph** sends a wave traveling
+  around the surface so the lobes flow like rising lava, **Sway** rocks the
+  view, and **Breathe** pulses amplitude, zoom, jitter, and chroma offset.
+  Every modulation is periodic over one loop, so it repeats seamlessly.
 - **Copies** — repeat the surface up to 5 times with per-copy spread,
   rotation step, scale step, and optional alternating color swap (the
   Ellipse preset uses 3 alternating copies).
@@ -36,11 +41,23 @@ python3 -m http.server 8000
   chromatic offset amount/angle, depth tint, directional gradient, and a
   sparkle slider that scatters rare accent-colored dots.
 - **Color** — front (red), back (blue), sparkle accent, and background.
-- **Randomize** re-seeds and rolls new shape parameters; **Drift** slowly
-  auto-rotates the surface while the jitter and chroma offset "breathe";
-  **Export PNG** downloads the canvas at full resolution (1000×1250).
+- **Play / Pause** toggles the loop (pausing freezes the current pose);
+  **Randomize** re-seeds and rolls new shape parameters.
+
+## Export
+
+- **Export PNG** — downloads the current frame at full resolution
+  (1000×1250), including the current animation pose.
+- **Export GIF** — renders every frame of one loop offline at full dot
+  density (half resolution, 500×625, 20 fps) and encodes it with the
+  built-in zero-dependency GIF89a encoder (`gif.js`). Deterministic and
+  perfectly seamless; takes a little while, progress is shown in the panel.
+- **Export Video** — records exactly one loop of the live animation in real
+  time with `MediaRecorder` (WebM where supported, MP4 otherwise) at full
+  canvas resolution and the live preview's dot density.
 
 The controls are sized for touch, so it works well on an iPad.
 
-While dragging a slider the canvas renders at reduced density for speed; the
-full-density render lands on release.
+While dragging a slider (and during animation playback) the canvas renders
+at reduced density for speed; the full-density render lands on release or
+pause.
