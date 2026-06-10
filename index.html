@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generative Visuals — Particle Surface Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside id="panel">
+  <h1>Particle Surface Studio</h1>
+
+  <section>
+    <h2>Shape</h2>
+    <label class="row">
+      <span>Preset</span>
+      <select id="preset">
+        <option value="shell">Shell</option>
+        <option value="flower">Flower</option>
+        <option value="ellipse">Ellipse</option>
+        <option value="mesh">Mesh</option>
+        <option value="blob">Blob</option>
+      </select>
+    </label>
+    <div id="shape-controls"></div>
+  </section>
+
+  <section>
+    <h2>View</h2>
+    <div id="view-controls"></div>
+  </section>
+
+  <section>
+    <h2>Texture</h2>
+    <div id="texture-controls"></div>
+  </section>
+
+  <section>
+    <h2>Color</h2>
+    <label class="row"><span>Front / red</span><input type="color" id="colorA" value="#ff2435"></label>
+    <label class="row"><span>Back / blue</span><input type="color" id="colorB" value="#2244ee"></label>
+    <label class="row"><span>Background</span><input type="color" id="colorBg" value="#cdb7ba"></label>
+  </section>
+
+  <section class="actions">
+    <button id="randomize">Randomize</button>
+    <button id="export">Export PNG</button>
+  </section>
+
+  <p class="hint">Tip: jitter 0 gives crisp moiré mesh, high jitter gives spray-paint grain.</p>
+</aside>
+
+<main id="stage">
+  <canvas id="canvas"></canvas>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
