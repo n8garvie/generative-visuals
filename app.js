@@ -42,6 +42,7 @@
     { key: 'lobesU', label: 'Lobes U', min: 0, max: 12, step: 1, def: 3, group: 'shape' },
     { key: 'lobesV', label: 'Lobes V', min: 0, max: 8, step: 1, def: 2, group: 'shape' },
     { key: 'amp', label: 'Amplitude', min: 0, max: 1, step: 0.01, def: 0.55, group: 'shape' },
+    { key: 'smooth', label: 'Smoothing', min: 0, max: 1, step: 0.01, def: 0.55, group: 'shape' },
     { key: 'twist', label: 'Twist', min: -3, max: 3, step: 0.05, def: 1.2, group: 'shape' },
     { key: 'sx', label: 'Stretch X', min: 0.1, max: 2, step: 0.01, def: 1, group: 'shape' },
     { key: 'sy', label: 'Stretch Y', min: 0.1, max: 2, step: 0.01, def: 1, group: 'shape' },
@@ -77,35 +78,35 @@
 
   const PRESETS = {
     shell: {
-      lobesU: 1, lobesV: 3, amp: 0.9, twist: 1.4, sx: 1, sy: 1, sz: 1,
+      lobesU: 1, lobesV: 3, amp: 0.9, smooth: 0.6, twist: 1.4, sx: 1, sy: 1, sz: 1,
       rotX: -40, rotY: 60, rotZ: 15, zoom: 1,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 700, gridRatio: 1.8, dotSize: 1.15, dotAlpha: 0.8, jitter: 0.2,
       chromaOff: 3, chromaAngle: 200, depthTint: 0.6, gradAmt: 0, gradAngle: 90,
     },
     flower: {
-      lobesU: 5, lobesV: 3, amp: 0.4, twist: 0.6, sx: 1, sy: 1, sz: 1,
+      lobesU: 5, lobesV: 3, amp: 0.4, smooth: 0.6, twist: 0.6, sx: 1, sy: 1, sz: 1,
       rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0.02, mirror: 'off',
       density: 600, gridRatio: 1.8, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.2,
       chromaOff: 3, chromaAngle: 150, depthTint: 0.7, gradAmt: 0, gradAngle: 90,
     },
     ellipse: {
-      lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
+      lobesU: 0, lobesV: 0, amp: 0, smooth: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35,
       copies: 3, spread: 0.31, rotStep: 0, scaleStep: 1.05, alternate: true, sparkle: 0, mirror: 'off',
       density: 540, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
       chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
     },
     mesh: {
-      lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
+      lobesU: 0, lobesV: 0, amp: 0, smooth: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 600, gridRatio: 1, dotSize: 0.9, dotAlpha: 0.55, jitter: 0,
       chromaOff: 9, chromaAngle: 250, depthTint: 0.25, gradAmt: 0.6, gradAngle: 100,
     },
     blob: {
-      lobesU: 2, lobesV: 2, amp: 0.3, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
+      lobesU: 2, lobesV: 2, amp: 0.3, smooth: 0.55, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
       rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 560, gridRatio: 1.5, dotSize: 1.3, dotAlpha: 0.6, jitter: 1,
@@ -218,6 +219,16 @@
     const morph = mod.morph ?? 0;
     const ampl = p.amp * (mod.ampMul ?? 1);
 
+    // Smoothing rounds the shape two ways: a tanh soft-saturation blunts the
+    // pointy lobe tips (the wave's peaks flatten gently instead of cresting
+    // sharply), and a smooth-max floor on the radius stops the surface from
+    // pinching through the centre, which is what creates hard cusps and
+    // creases in the silhouette.
+    const sm = p.smooth;
+    const satG = 2.5 * sm;
+    const satNorm = sm ? 1 / Math.tanh(satG) : 0;
+    const pinch = 0.5 * sm;
+
     const ax = ((p.rotX + (mod.swayX ?? 0)) * Math.PI) / 180;
     const ay = (rotY * Math.PI) / 180;
     const az = (p.rotZ * Math.PI) / 180;
@@ -240,10 +251,12 @@
         // full 2π over one loop, so the lobes flow around the surface like
         // rising lava and land exactly back on the static shape.
         const base = p.lobesU * u + p.twist * v;
-        const wave = morph
+        let wave = morph
           ? (1 - morph) * Math.sin(base) + morph * Math.sin(base - ph)
           : Math.sin(base);
-        const r = 1 + ampl * wave * Math.sin(p.lobesV * v);
+        if (sm) wave = Math.tanh(satG * wave) * satNorm;
+        let r = 1 + ampl * wave * Math.sin(p.lobesV * v);
+        if (sm) r = (r + Math.sqrt(r * r + pinch * pinch)) / 2;
         const x = r * p.sx * sv * Math.cos(u);
         const y = r * p.sy * sv * Math.sin(u);
         const z = r * p.sz * Math.cos(v);
@@ -431,6 +444,7 @@
       lobesU: ri(1, 8),
       lobesV: ri(1, 5),
       amp: rf(0.1, 0.7),
+      smooth: rf(0.25, 0.85),
       twist: rf(-2.5, 2.5),
       sx: rf(0.5, 1.4),
       sy: rf(0.5, 1.4),
@@ -555,6 +569,10 @@
   $('export-gif').addEventListener('click', exportGif);
   $('export-video').addEventListener('click', exportVideo);
   $('play').addEventListener('click', () => setPlaying(!playing));
+  $('fullscreen').addEventListener('click', () => {
+    const on = document.body.classList.toggle('fullscreen');
+    $('fullscreen').setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+  });
   $('alternate').addEventListener('change', () => scheduleRender(false));
   $('mirror').addEventListener('change', () => scheduleRender(false));
   for (const id of ['colorA', 'colorB', 'colorC', 'colorBg']) {

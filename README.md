@@ -27,6 +27,8 @@ python3 -m http.server 8000
 
 - **Shape** — preset (Shell / Flower / Ellipse / Mesh / Blob), lobes,
   amplitude, twist, and per-axis stretch of the parametric surface.
+  **Smoothing** rounds the pointy lobe tips and keeps the surface from
+  pinching through the centre, trading sharp cusps for flowing curves.
 - **View** — rotation on three axes, zoom, and a mirror mode
   (Flip X / Flip Y / Kaleido) that reflects the composition.
 - **Animation** — a lava-lamp style loop plays by default. **Loop (sec)**
@@ -56,7 +58,9 @@ python3 -m http.server 8000
   time with `MediaRecorder` (WebM where supported, MP4 otherwise) at full
   canvas resolution and the live preview's dot density.
 
-The controls are sized for touch, so it works well on an iPad.
+The controls are sized for touch, so it works well on an iPad. The toggle in
+the bottom-right corner of the canvas maximizes it over the whole viewport
+(handy on phones); tap again to bring the panel back.
 
 While dragging a slider (and during animation playback) the canvas renders
 at reduced density for speed; the full-density render lands on release or
