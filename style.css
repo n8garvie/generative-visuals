@@ -5,12 +5,14 @@
   --panel-fg: #d8d4da;
   --panel-dim: #8b8492;
   --accent: #ff4d5e;
+  --track: #3a343f;
 }
 
 html, body {
   height: 100%;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   background: #0f0e11;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -18,63 +20,103 @@ body {
 }
 
 #panel {
-  width: 280px;
-  flex: 0 0 280px;
+  width: 340px;
+  flex: 0 0 340px;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--panel-bg);
   color: var(--panel-fg);
-  padding: 18px 16px 32px;
+  padding: 20px 18px 40px;
   border-right: 1px solid #2a262e;
 }
 
 #panel h1 {
-  font-size: 13px;
+  font-size: 15px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   color: var(--accent);
 }
 
 #panel section {
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 #panel h2 {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--panel-dim);
   margin-bottom: 8px;
   border-bottom: 1px solid #2a262e;
-  padding-bottom: 4px;
+  padding-bottom: 5px;
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  margin: 7px 0;
+  gap: 10px;
+  font-size: 13px;
+  min-height: 44px;
+  touch-action: manipulation;
 }
 
 .row > span:first-child {
-  flex: 0 0 88px;
+  flex: 0 0 92px;
   color: var(--panel-fg);
 }
 
-.row input[type="range"] {
-  flex: 1;
-  accent-color: var(--accent);
-  min-width: 0;
-}
-
 .row .val {
-  flex: 0 0 38px;
+  flex: 0 0 44px;
   text-align: right;
   color: var(--panel-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* Touch-friendly sliders: tall hit area, big thumb */
+.row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.row input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+}
+
+.row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #1d1a20;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.row input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+}
+
+.row input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #1d1a20;
 }
 
 .row select,
@@ -83,38 +125,54 @@ body {
   background: #221f26;
   color: var(--panel-fg);
   border: 1px solid #353039;
-  border-radius: 4px;
-  padding: 3px 4px;
+  border-radius: 6px;
+  padding: 4px 8px;
   font: inherit;
-  height: 26px;
+  height: 44px;
+}
+
+.row.toggle input[type="checkbox"] {
+  width: 28px;
+  height: 28px;
+  accent-color: var(--accent);
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .actions button {
-  flex: 1;
-  padding: 8px 0;
+  flex: 1 1 40%;
+  min-height: 48px;
+  padding: 10px 0;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: #221f26;
   color: var(--panel-fg);
   border: 1px solid #3a343f;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.actions button:hover {
+.actions button:hover,
+.actions button:active {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.actions button.on {
+  background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
 .hint {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--panel-dim);
 }
@@ -122,6 +180,7 @@ body {
 #stage {
   flex: 1;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,4 +191,23 @@ body {
   max-width: 100%;
   max-height: 100%;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* Portrait tablets / phones: panel becomes a bottom sheet */
+@media (max-width: 900px) {
+  body {
+    flex-direction: column;
+  }
+  #stage {
+    height: 55dvh;
+    order: 0;
+  }
+  #panel {
+    width: 100%;
+    flex: 1;
+    height: auto;
+    order: 1;
+    border-right: none;
+    border-top: 1px solid #2a262e;
+  }
 }

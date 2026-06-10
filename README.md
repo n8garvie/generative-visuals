@@ -28,11 +28,17 @@ python3 -m http.server 8000
 - **Shape** — preset (Shell / Flower / Ellipse / Mesh / Blob), lobes,
   amplitude, twist, and per-axis stretch of the parametric surface.
 - **View** — rotation on three axes and zoom.
+- **Copies** — repeat the surface up to 5 times with per-copy spread,
+  rotation step, scale step, and optional alternating color swap (the
+  Ellipse preset uses 3 alternating copies).
 - **Texture** — grid density and ratio, dot size/alpha, jitter (grain),
   chromatic offset amount/angle, depth tint, directional gradient.
 - **Color** — front (red), back (blue), and background colors.
-- **Randomize** re-seeds and rolls new shape parameters; **Export PNG**
-  downloads the canvas at full resolution (1000×1250).
+- **Randomize** re-seeds and rolls new shape parameters; **Drift** slowly
+  auto-rotates the surface; **Export PNG** downloads the canvas at full
+  resolution (1000×1250).
+
+The controls are sized for touch, so it works well on an iPad.
 
 While dragging a slider the canvas renders at reduced density for speed; the
 full-density render lands on release.

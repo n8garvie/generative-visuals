@@ -4,7 +4,8 @@
  * Renders a 3D parametric surface as a dense lattice of tiny dots, drawn in
  * two slightly offset color passes (red/blue). The regular grid produces
  * moiré interference rings; per-dot jitter trades the moiré for grain; the
- * pass offset produces chromatic fringing on the rims.
+ * pass offset produces chromatic fringing on the rims. The Copies group
+ * repeats the surface with per-copy rotation/scale/color variation.
  */
 
 (() => {
@@ -37,6 +38,11 @@
     { key: 'rotZ', label: 'Rotate Z', min: -180, max: 180, step: 1, def: 10, group: 'view' },
     { key: 'zoom', label: 'Zoom', min: 0.3, max: 2.5, step: 0.01, def: 1.1, group: 'view' },
 
+    { key: 'copies', label: 'Copies', min: 1, max: 5, step: 1, def: 1, group: 'copies' },
+    { key: 'spread', label: 'Spread', min: 0, max: 0.6, step: 0.01, def: 0.3, group: 'copies' },
+    { key: 'rotStep', label: 'Turn step', min: -90, max: 90, step: 1, def: 0, group: 'copies' },
+    { key: 'scaleStep', label: 'Scale step', min: 0.7, max: 1.3, step: 0.01, def: 1, group: 'copies' },
+
     { key: 'density', label: 'Density', min: 80, max: 700, step: 10, def: 520, group: 'texture' },
     { key: 'gridRatio', label: 'Grid ratio', min: 0.25, max: 4, step: 0.05, def: 1, group: 'texture' },
     { key: 'dotSize', label: 'Dot size', min: 0.5, max: 3, step: 0.1, def: 1.4, group: 'texture' },
@@ -53,30 +59,35 @@
     shell: {
       lobesU: 1, lobesV: 3, amp: 0.9, twist: 1.4, sx: 1, sy: 1, sz: 1,
       rotX: -40, rotY: 60, rotZ: 15, zoom: 1,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
       density: 700, gridRatio: 1.8, dotSize: 1.15, dotAlpha: 0.8, jitter: 0.2,
       chromaOff: 3, chromaAngle: 200, depthTint: 0.6, gradAmt: 0, gradAngle: 90,
     },
     flower: {
       lobesU: 5, lobesV: 3, amp: 0.4, twist: 0.6, sx: 1, sy: 1, sz: 1,
       rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
       density: 600, gridRatio: 1.8, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.2,
       chromaOff: 3, chromaAngle: 150, depthTint: 0.7, gradAmt: 0, gradAngle: 90,
     },
     ellipse: {
-      lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.5, sy: 0.35, sz: 1.45,
-      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
-      density: 640, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
+      lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
+      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35,
+      copies: 3, spread: 0.31, rotStep: 0, scaleStep: 1.05, alternate: true,
+      density: 540, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
       chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
     },
     mesh: {
       lobesU: 0, lobesV: 0, amp: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
       density: 600, gridRatio: 1, dotSize: 0.9, dotAlpha: 0.55, jitter: 0,
       chromaOff: 9, chromaAngle: 250, depthTint: 0.25, gradAmt: 0.6, gradAngle: 100,
     },
     blob: {
       lobesU: 2, lobesV: 2, amp: 0.3, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
       rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1,
+      copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false,
       density: 560, gridRatio: 1.5, dotSize: 1.3, dotAlpha: 0.6, jitter: 1,
       chromaOff: 6, chromaAngle: 60, depthTint: 0.45, gradAmt: 0.3, gradAngle: 0,
     },
@@ -108,6 +119,7 @@
     const containers = {
       shape: $('shape-controls'),
       view: $('view-controls'),
+      copies: $('copies-controls'),
       texture: $('texture-controls'),
     };
     for (const def of PARAM_DEFS) {
@@ -167,27 +179,21 @@
     });
   }
 
-  function render(preview) {
-    const p = state.params;
-    const rnd = mulberry32(state.seed);
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = $('colorBg').value;
-    ctx.fillRect(0, 0, W, H);
-
+  // Draws one surface instance. colA is the front/top color, colB the
+  // offset back color.
+  function drawSurface(p, rnd, preview, cx, rotY, zoom, colA, colB) {
     const dens = preview ? Math.max(60, Math.round(p.density * 0.45)) : p.density;
     const nu = dens;
     // gridRatio > 1 thins the v sampling, leaving visible dotted rows.
     const nv = Math.max(20, Math.round((dens * 0.75) / p.gridRatio));
     const n = nu * nv;
 
-    const cx = W / 2;
     const cy = H / 2;
-    const scale = Math.min(W, H) * 0.31 * p.zoom;
+    const scale = Math.min(W, H) * 0.31 * zoom;
     const persp = 5;
 
     const ax = (p.rotX * Math.PI) / 180;
-    const ay = (p.rotY * Math.PI) / 180;
+    const ay = (rotY * Math.PI) / 180;
     const az = (p.rotZ * Math.PI) / 180;
     const cxr = Math.cos(ax), sxr = Math.sin(ax);
     const cyr = Math.cos(ay), syr = Math.sin(ay);
@@ -205,14 +211,14 @@
         const sv = Math.sin(v);
 
         const r = 1 + p.amp * Math.sin(p.lobesU * u + p.twist * v) * Math.sin(p.lobesV * v);
-        let x = r * p.sx * sv * Math.cos(u);
-        let y = r * p.sy * sv * Math.sin(u);
-        let z = r * p.sz * Math.cos(v);
+        const x = r * p.sx * sv * Math.cos(u);
+        const y = r * p.sy * sv * Math.sin(u);
+        const z = r * p.sz * Math.cos(v);
 
         // rotate X, then Y, then Z
-        let y1 = y * cxr - z * sxr;
+        const y1 = y * cxr - z * sxr;
         let z1 = y * sxr + z * cxr;
-        let x1 = x * cyr + z1 * syr;
+        const x1 = x * cyr + z1 * syr;
         z1 = -x * syr + z1 * cyr;
         const x2 = x1 * czr - y1 * szr;
         const y2 = x1 * szr + y1 * czr;
@@ -259,18 +265,64 @@
 
     const s = p.dotSize;
     ctx.globalAlpha = p.dotAlpha;
-    // colorB underneath, colorA (front/red) on top.
-    ctx.fillStyle = $('colorB').value;
+    // colB underneath, colA (front) on top.
+    ctx.fillStyle = colB;
     for (let j = 0; j < posB.length; j += 2) ctx.fillRect(posB[j], posB[j + 1], s, s);
-    ctx.fillStyle = $('colorA').value;
+    ctx.fillStyle = colA;
     for (let j = 0; j < posA.length; j += 2) ctx.fillRect(posA[j], posA[j + 1], s, s);
     ctx.globalAlpha = 1;
+  }
+
+  function render(preview) {
+    const p = state.params;
+    const rnd = mulberry32(state.seed);
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = $('colorBg').value;
+    ctx.fillRect(0, 0, W, H);
+
+    const copies = Math.round(p.copies);
+    const alternate = $('alternate').checked;
+    const colA = $('colorA').value;
+    const colB = $('colorB').value;
+
+    for (let c = 0; c < copies; c++) {
+      const cx = W / 2 + (c - (copies - 1) / 2) * p.spread * W;
+      const rotY = p.rotY + p.rotStep * c;
+      const zoom = p.zoom * Math.pow(p.scaleStep, c);
+      const swap = alternate && c % 2 === 1;
+      drawSurface(p, rnd, preview, cx, rotY, zoom, swap ? colB : colA, swap ? colA : colB);
+    }
+  }
+
+  // ---------------------------------------------------------------- drift
+
+  let drifting = false;
+
+  function driftLoop() {
+    if (!drifting) return;
+    let v = state.params.rotY + 0.25;
+    if (v > 180) v -= 360;
+    state.params.rotY = v;
+    sliderEls.rotY.input.value = v;
+    sliderEls.rotY.val.textContent = v.toFixed(0);
+    render(true);
+    requestAnimationFrame(driftLoop);
+  }
+
+  function setDrift(on) {
+    drifting = on;
+    $('drift').classList.toggle('on', on);
+    if (on) driftLoop();
+    else scheduleRender(false);
   }
 
   // -------------------------------------------------------------- actions
 
   function applyPreset(name) {
-    Object.assign(state.params, PRESETS[name]);
+    const { alternate, ...params } = PRESETS[name];
+    Object.assign(state.params, params);
+    $('alternate').checked = alternate;
     syncUI();
     scheduleRender(false);
   }
@@ -291,6 +343,7 @@
       rotX: ri(-90, 90),
       rotY: ri(-90, 90),
       rotZ: ri(-90, 90),
+      rotStep: ri(-45, 45),
       jitter: rf(0, 3),
       gridRatio: rf(0.5, 3),
       chromaOff: rf(2, 10, 1),
@@ -318,10 +371,12 @@
 
   buildSliders();
   // Console/scripting access: studio.state.params, studio.render(), etc.
-  window.studio = { state, render: () => scheduleRender(false), syncUI, applyPreset, randomize };
+  window.studio = { state, render: () => scheduleRender(false), syncUI, applyPreset, randomize, setDrift };
   $('preset').addEventListener('change', (e) => applyPreset(e.target.value));
   $('randomize').addEventListener('click', randomize);
   $('export').addEventListener('click', exportPng);
+  $('drift').addEventListener('click', () => setDrift(!drifting));
+  $('alternate').addEventListener('change', () => scheduleRender(false));
   for (const id of ['colorA', 'colorB', 'colorBg']) {
     $(id).addEventListener('input', () => scheduleRender(true));
     $(id).addEventListener('change', () => scheduleRender(false));
