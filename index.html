@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Generative Visuals — Particle Surface Studio</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <aside id="panel">
@@ -72,6 +72,10 @@
     <button id="export">Export PNG</button>
     <button id="export-gif">Export GIF</button>
     <button id="export-video">Export Video</button>
+    <!-- Compatibility shim: a stale cached app.js (pre-animation) wires a
+         Drift button and crashes during init without it, blanking the canvas.
+         Remove once GitHub Pages caches have long since rolled over. -->
+    <button id="drift" hidden>Drift</button>
   </section>
 
   <p id="status" class="hint" aria-live="polite"></p>
@@ -82,7 +86,7 @@
   <canvas id="canvas"></canvas>
 </main>
 
-<script src="gif.js"></script>
-<script src="app.js"></script>
+<script src="gif.js?v=2"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
