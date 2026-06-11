@@ -145,6 +145,9 @@
       anim: $('anim-controls'),
     };
     for (const def of PARAM_DEFS) {
+      // A stale cached index.html may predate this group's container; skip
+      // the group rather than crashing init and blanking the canvas.
+      if (!containers[def.group]) continue;
       const row = document.createElement('label');
       row.className = 'row';
 
@@ -177,9 +180,11 @@
 
   function syncUI() {
     for (const def of PARAM_DEFS) {
+      const els = sliderEls[def.key];
+      if (!els) continue;
       const v = state.params[def.key];
-      sliderEls[def.key].input.value = v;
-      sliderEls[def.key].val.textContent = String(v);
+      els.input.value = v;
+      els.val.textContent = String(v);
     }
   }
 
@@ -418,8 +423,10 @@
     if (exporting) return;
     playing = on;
     const btn = $('play');
-    btn.classList.toggle('on', on);
-    btn.textContent = on ? 'Pause' : 'Play';
+    if (btn) {
+      btn.classList.toggle('on', on);
+      btn.textContent = on ? 'Pause' : 'Play';
+    }
     if (on) {
       lastTick = performance.now();
       requestAnimationFrame(tick);
@@ -479,7 +486,8 @@
   }
 
   function setStatus(msg) {
-    $('status').textContent = msg;
+    const el = $('status');
+    if (el) el.textContent = msg;
   }
 
   function exportPng() {
@@ -567,21 +575,24 @@
   buildSliders();
   // Console/scripting access: studio.state.params, studio.render(), etc.
   window.studio = { state, render: () => scheduleRender(false), syncUI, applyPreset, randomize, setPlaying, exportGif, exportVideo };
-  $('preset').addEventListener('change', (e) => applyPreset(e.target.value));
-  $('randomize').addEventListener('click', randomize);
-  $('export').addEventListener('click', exportPng);
-  $('export-gif').addEventListener('click', exportGif);
-  $('export-video').addEventListener('click', exportVideo);
-  $('play').addEventListener('click', () => setPlaying(!playing));
-  $('fullscreen').addEventListener('click', () => {
-    const on = document.body.classList.toggle('fullscreen');
-    $('fullscreen').setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+  // Missing elements (a stale cached index.html) lose their feature but must
+  // never abort init — the canvas should always come up rendering.
+  const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+  on('preset', 'change', (e) => applyPreset(e.target.value));
+  on('randomize', 'click', randomize);
+  on('export', 'click', exportPng);
+  on('export-gif', 'click', exportGif);
+  on('export-video', 'click', exportVideo);
+  on('play', 'click', () => setPlaying(!playing));
+  on('fullscreen', 'click', () => {
+    const isOn = document.body.classList.toggle('fullscreen');
+    $('fullscreen').setAttribute('aria-label', isOn ? 'Exit fullscreen' : 'Enter fullscreen');
   });
-  $('alternate').addEventListener('change', () => scheduleRender(false));
-  $('mirror').addEventListener('change', () => scheduleRender(false));
+  on('alternate', 'change', () => scheduleRender(false));
+  on('mirror', 'change', () => scheduleRender(false));
   for (const id of ['colorA', 'colorB', 'colorC', 'colorBg']) {
-    $(id).addEventListener('input', () => scheduleRender(true));
-    $(id).addEventListener('change', () => scheduleRender(false));
+    on(id, 'input', () => scheduleRender(true));
+    on(id, 'change', () => scheduleRender(false));
   }
 
   applyPreset($('preset').value);
