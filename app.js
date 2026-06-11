@@ -13,6 +13,12 @@
  * 0..2π over one loop, so the loop is seamless and all mods are the identity
  * at phase 0. Loops export as GIF (offline, full density, via gif.js) or
  * WebM (realtime MediaRecorder capture).
+ *
+ * Cinematic extras: the background is a wash of big soft color blobs that
+ * drift behind the shape (blurred at low resolution, then upscaled), and a
+ * depth-of-field pass buckets the dots into depth slices and composites the
+ * out-of-focus slices through a gaussian blur that grows with distance from
+ * the focal plane.
  */
 
 (() => {
@@ -36,6 +42,39 @@
   off.height = H;
   const offCtx = off.getContext('2d');
 
+  // Scratch layers for the depth-of-field pass: each out-of-focus depth
+  // slice is drawn into dofLayer, blurred into dofBlur, and the result is
+  // composited onto the shape layer. Both run at half resolution — blurred
+  // content has no fine detail to lose, and the gaussian blur cost scales
+  // with both pixel count and radius.
+  const DOF_SCALE = 2;
+  const dofLayer = document.createElement('canvas');
+  dofLayer.width = W / DOF_SCALE;
+  dofLayer.height = H / DOF_SCALE;
+  const dofCtx = dofLayer.getContext('2d');
+  dofCtx.setTransform(1 / DOF_SCALE, 0, 0, 1 / DOF_SCALE, 0, 0);
+  const dofBlur = document.createElement('canvas');
+  dofBlur.width = dofLayer.width;
+  dofBlur.height = dofLayer.height;
+  const dofBlurCtx = dofBlur.getContext('2d');
+
+  // Background blob layers render at quarter resolution with a padded border:
+  // the blur is applied at low res (cheap — the radius scales down with the
+  // layer) and the padding is cropped on the upscale so the blur never
+  // vignettes the canvas edges.
+  const BG_SCALE = 8;
+  const BG_PAD = Math.round((W / BG_SCALE) * 0.3);
+  const bgW = Math.round(W / BG_SCALE) + BG_PAD * 2;
+  const bgH = Math.round(H / BG_SCALE) + BG_PAD * 2;
+  const bgLayer = document.createElement('canvas');
+  bgLayer.width = bgW;
+  bgLayer.height = bgH;
+  const bgCtx = bgLayer.getContext('2d');
+  const bgOut = document.createElement('canvas');
+  bgOut.width = bgW;
+  bgOut.height = bgH;
+  const bgOutCtx = bgOut.getContext('2d');
+
   // ---------------------------------------------------------------- params
 
   const PARAM_DEFS = [
@@ -52,6 +91,13 @@
     { key: 'rotY', label: 'Rotate Y', min: -180, max: 180, step: 1, def: 30, group: 'view' },
     { key: 'rotZ', label: 'Rotate Z', min: -180, max: 180, step: 1, def: 10, group: 'view' },
     { key: 'zoom', label: 'Zoom', min: 0.1, max: 3, step: 0.01, def: 1.1, group: 'view' },
+    { key: 'dofAmt', label: 'Depth blur', min: 0, max: 1, step: 0.01, def: 0.35, group: 'view' },
+    { key: 'dofFocus', label: 'Focus', min: 0, max: 1, step: 0.01, def: 0.72, group: 'view' },
+
+    { key: 'bgBlobs', label: 'Blobs', min: 0, max: 6, step: 1, def: 4, group: 'bg' },
+    { key: 'bgGlow', label: 'Strength', min: 0, max: 1, step: 0.01, def: 0.5, group: 'bg' },
+    { key: 'bgBlur', label: 'Blur', min: 0, max: 160, step: 1, def: 100, group: 'bg' },
+    { key: 'bgDrift', label: 'Drift', min: 0, max: 1, step: 0.01, def: 0.5, group: 'bg' },
 
     { key: 'copies', label: 'Copies', min: 1, max: 5, step: 1, def: 1, group: 'copies' },
     { key: 'spread', label: 'Spread', min: 0, max: 0.6, step: 0.01, def: 0.3, group: 'copies' },
@@ -79,38 +125,43 @@
   const PRESETS = {
     shell: {
       lobesU: 1, lobesV: 3, amp: 0.9, smooth: 0.6, twist: 1.4, sx: 1, sy: 1, sz: 1,
-      rotX: -40, rotY: 60, rotZ: 15, zoom: 1,
+      rotX: -40, rotY: 60, rotZ: 15, zoom: 1, dofAmt: 0.3, dofFocus: 0.72,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 700, gridRatio: 1.8, dotSize: 1.15, dotAlpha: 0.8, jitter: 0.2,
       chromaOff: 3, chromaAngle: 200, depthTint: 0.6, gradAmt: 0, gradAngle: 90,
+      bgBlobs: 3, bgGlow: 0.35, bgBlur: 100, bgDrift: 0.4,
     },
     flower: {
       lobesU: 5, lobesV: 3, amp: 0.4, smooth: 0.6, twist: 0.6, sx: 1, sy: 1, sz: 1,
-      rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15,
+      rotX: -55, rotY: 0, rotZ: 25, zoom: 1.15, dofAmt: 0.3, dofFocus: 0.75,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0.02, mirror: 'off',
       density: 600, gridRatio: 1.8, dotSize: 1.1, dotAlpha: 0.6, jitter: 0.2,
       chromaOff: 3, chromaAngle: 150, depthTint: 0.7, gradAmt: 0, gradAngle: 90,
+      bgBlobs: 3, bgGlow: 0.4, bgBlur: 100, bgDrift: 0.4,
     },
     ellipse: {
       lobesU: 0, lobesV: 0, amp: 0, smooth: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
-      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35,
+      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35, dofAmt: 0, dofFocus: 0.72,
       copies: 3, spread: 0.23, rotStep: 0, scaleStep: 1.05, alternate: true, sparkle: 0, mirror: 'off',
       density: 540, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
       chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
+      bgBlobs: 2, bgGlow: 0.25, bgBlur: 120, bgDrift: 0.3,
     },
     mesh: {
       lobesU: 0, lobesV: 0, amp: 0, smooth: 0, twist: 0, sx: 0.55, sy: 0.4, sz: 1.5,
-      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25,
+      rotX: 0, rotY: 0, rotZ: 0, zoom: 1.25, dofAmt: 0, dofFocus: 0.72,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 600, gridRatio: 1, dotSize: 0.9, dotAlpha: 0.55, jitter: 0,
       chromaOff: 9, chromaAngle: 250, depthTint: 0.25, gradAmt: 0.6, gradAngle: 100,
+      bgBlobs: 0, bgGlow: 0.3, bgBlur: 100, bgDrift: 0.3,
     },
     blob: {
       lobesU: 2, lobesV: 2, amp: 0.3, smooth: 0.55, twist: 2.2, sx: 1, sy: 0.8, sz: 1.1,
-      rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1,
+      rotX: 35, rotY: -40, rotZ: 0, zoom: 1.1, dofAmt: 0.55, dofFocus: 0.72,
       copies: 1, spread: 0.3, rotStep: 0, scaleStep: 1, alternate: false, sparkle: 0, mirror: 'off',
       density: 560, gridRatio: 1.5, dotSize: 1.3, dotAlpha: 0.6, jitter: 1,
       chromaOff: 6, chromaAngle: 60, depthTint: 0.45, gradAmt: 0.3, gradAngle: 0,
+      bgBlobs: 4, bgGlow: 0.6, bgBlur: 120, bgDrift: 0.5,
     },
   };
 
@@ -143,6 +194,7 @@
       copies: $('copies-controls'),
       texture: $('texture-controls'),
       anim: $('anim-controls'),
+      bg: $('bg-controls'),
     };
     for (const def of PARAM_DEFS) {
       // A stale cached index.html may predate this group's container; skip
@@ -291,9 +343,21 @@
     // the gradient direction), so mixed regions read as vivid optical
     // grey-blue instead of muddy blended purple. Pass 1 leans toward colorA
     // (front), the chroma-offset pass 2 toward colorB (back).
+    // Depth of field: dots are bucketed into depth slices (back to front).
+    // In-focus slices draw straight onto the layer; out-of-focus slices are
+    // composited through a gaussian blur whose radius grows with distance
+    // from the focal plane, so the surface falls off like a camera lens.
+    // dofAmt 0 keeps the original single-slice fast path.
+    const BINS = p.dofAmt > 0 ? 6 : 1;
+    const maxBlur = p.dofAmt * 26;
     const posA = [];
     const posB = [];
     const posC = []; // rare accent-color dots
+    for (let b = 0; b < BINS; b++) {
+      posA.push([]);
+      posB.push([]);
+      posC.push([]);
+    }
     const chroma = p.chromaOff * (mod.chromaMul ?? 1);
     const ox = Math.cos((p.chromaAngle * Math.PI) / 180) * chroma;
     const oy = Math.sin((p.chromaAngle * Math.PI) / 180) * chroma;
@@ -316,24 +380,101 @@
       const gr = (x - cx) * gx + (y - cy) * gy;
       const f1 = p.depthTint * (1 - t) + gr;
       const f2 = 1 - p.depthTint * t + gr;
-      if (spk && rnd() < spk) posC.push(x, y);
-      else (rnd() < f1 ? posB : posA).push(x, y);
-      (rnd() < f2 ? posB : posA).push(x + ox, y + oy);
+      const bin = BINS === 1 ? 0 : Math.min(BINS - 1, (t * BINS) | 0);
+      if (spk && rnd() < spk) posC[bin].push(x, y);
+      else (rnd() < f1 ? posB : posA)[bin].push(x, y);
+      (rnd() < f2 ? posB : posA)[bin].push(x + ox, y + oy);
     }
 
     const s = p.dotSize;
-    g.globalAlpha = p.dotAlpha;
-    // colB underneath, colA (front) on top, accent sparkle above both.
-    g.fillStyle = colB;
-    for (let j = 0; j < posB.length; j += 2) g.fillRect(posB[j], posB[j + 1], s, s);
-    g.fillStyle = colA;
-    for (let j = 0; j < posA.length; j += 2) g.fillRect(posA[j], posA[j + 1], s, s);
-    if (posC.length) {
-      g.globalAlpha = Math.min(1, p.dotAlpha * 1.5);
-      g.fillStyle = $('colorC').value;
-      for (let j = 0; j < posC.length; j += 2) g.fillRect(posC[j], posC[j + 1], s, s);
+    const colC = $('colorC').value;
+    // Slices back to front; within each slice colB underneath, colA (front)
+    // on top, accent sparkle above both.
+    for (let b = 0; b < BINS; b++) {
+      const pa = posA[b];
+      const pb = posB[b];
+      const pc = posC[b];
+      if (!pa.length && !pb.length && !pc.length) continue;
+      const blur = BINS === 1 ? 0 : maxBlur * Math.abs((b + 0.5) / BINS - p.dofFocus);
+      const direct = blur < 0.75 || typeof dofBlurCtx.filter !== 'string';
+      const d = direct ? g : dofCtx;
+      if (!direct) d.clearRect(0, 0, W, H);
+      d.globalAlpha = p.dotAlpha;
+      d.fillStyle = colB;
+      for (let j = 0; j < pb.length; j += 2) d.fillRect(pb[j], pb[j + 1], s, s);
+      d.fillStyle = colA;
+      for (let j = 0; j < pa.length; j += 2) d.fillRect(pa[j], pa[j + 1], s, s);
+      if (pc.length) {
+        d.globalAlpha = Math.min(1, p.dotAlpha * 1.5);
+        d.fillStyle = colC;
+        for (let j = 0; j < pc.length; j += 2) d.fillRect(pc[j], pc[j + 1], s, s);
+      }
+      d.globalAlpha = 1;
+      if (!direct) {
+        // Blur at the layer's half resolution (so the radius halves too),
+        // then upscale onto the shape layer.
+        dofBlurCtx.clearRect(0, 0, dofBlur.width, dofBlur.height);
+        dofBlurCtx.filter = `blur(${(blur / DOF_SCALE).toFixed(1)}px)`;
+        dofBlurCtx.drawImage(dofLayer, 0, 0);
+        dofBlurCtx.filter = 'none';
+        g.drawImage(dofBlur, 0, 0, W, H);
+      }
     }
-    g.globalAlpha = 1;
+  }
+
+  // Fills the main canvas with the flat background color plus a wash of big
+  // soft color blobs (front/back palette colors) drifting over it. Blob
+  // placement is seeded so it only changes on Randomize; drift is built from
+  // integer-frequency sines of the loop phase, so the motion loops
+  // seamlessly along with everything else.
+  function hexRgb(hex) {
+    return [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+  }
+
+  function drawBackground(p, ph) {
+    ctx.fillStyle = $('colorBg').value;
+    ctx.fillRect(0, 0, W, H);
+    const count = Math.round(p.bgBlobs);
+    if (!count || p.bgGlow <= 0) return;
+
+    bgCtx.fillStyle = $('colorBg').value;
+    bgCtx.fillRect(0, 0, bgW, bgH);
+    const rnd = mulberry32(state.seed ^ 0x9e3779b9);
+    const cols = [hexRgb($('colorA').value), hexRgb($('colorB').value)];
+    const iw = bgW - BG_PAD * 2;
+    const ih = bgH - BG_PAD * 2;
+    for (let i = 0; i < count; i++) {
+      const [cr, cg, cb] = cols[i % 2];
+      const baseX = BG_PAD + (0.1 + 0.8 * rnd()) * iw;
+      const baseY = BG_PAD + (0.1 + 0.8 * rnd()) * ih;
+      const rad = (0.35 + 0.4 * rnd()) * Math.max(iw, ih);
+      const k1 = 1 + ((rnd() * 2) | 0); // integer speeds keep the loop seamless
+      const k2 = 1 + ((rnd() * 2) | 0);
+      const th1 = rnd() * TAU;
+      const th2 = rnd() * TAU;
+      const a = p.bgGlow * (0.5 + 0.3 * rnd());
+      const x = baseX + Math.sin(ph * k1 + th1) * p.bgDrift * 0.22 * iw;
+      const y = baseY + Math.sin(ph * k2 + th2) * p.bgDrift * 0.22 * ih;
+      const grad = bgCtx.createRadialGradient(x, y, 0, x, y, rad);
+      grad.addColorStop(0, `rgba(${cr},${cg},${cb},${a})`);
+      grad.addColorStop(0.55, `rgba(${cr},${cg},${cb},${a * 0.45})`);
+      grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+      bgCtx.fillStyle = grad;
+      bgCtx.fillRect(0, 0, bgW, bgH);
+    }
+
+    if (typeof bgOutCtx.filter === 'string') {
+      bgOutCtx.filter = `blur(${(p.bgBlur / BG_SCALE).toFixed(1)}px)`;
+      bgOutCtx.drawImage(bgLayer, 0, 0);
+      bgOutCtx.filter = 'none';
+      ctx.drawImage(bgOut, BG_PAD, BG_PAD, iw, ih, 0, 0, W, H);
+    } else {
+      ctx.drawImage(bgLayer, BG_PAD, BG_PAD, iw, ih, 0, 0, W, H);
+    }
   }
 
   function render(preview, mod = {}) {
@@ -361,8 +502,7 @@
 
     // Composite the shape layer over the background, with optional mirrors.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = $('colorBg').value;
-    ctx.fillRect(0, 0, W, H);
+    drawBackground(p, mod.phase ?? 0);
     ctx.drawImage(off, 0, 0);
     const mirror = $('mirror').value;
     if (mirror === 'x' || mirror === 'quad') {
