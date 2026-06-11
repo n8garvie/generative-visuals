@@ -30,7 +30,10 @@ python3 -m http.server 8000
   **Smoothing** rounds the pointy lobe tips and keeps the surface from
   pinching through the centre, trading sharp cusps for flowing curves.
 - **View** — rotation on three axes, zoom, and a mirror mode
-  (Flip X / Flip Y / Kaleido) that reflects the composition.
+  (Flip X / Flip Y / Kaleido) that reflects the composition. **Depth blur**
+  adds cinematic depth of field: dots are sliced by depth and the slices far
+  from the **Focus** plane (1 = front, 0 = back) are composited through a
+  gaussian blur that grows with distance, like a lens falling out of focus.
 - **Animation** — a lava-lamp style loop plays by default. **Loop (sec)**
   sets the loop length (default 5 s), **Morph** sends a wave traveling
   around the surface so the lobes flow like rising lava, **Sway** rocks the
@@ -42,6 +45,12 @@ python3 -m http.server 8000
 - **Texture** — grid density and ratio, dot size/alpha, jitter (grain),
   chromatic offset amount/angle, depth tint, directional gradient, and a
   sparkle slider that scatters rare accent-colored dots.
+- **Background** — a smooth out-of-focus gradient wash behind the shape:
+  up to 6 big soft blobs in the front/back palette colors drift slowly over
+  the flat background color. **Blobs** sets how many, **Strength** their
+  opacity, **Blur** how soft they are, and **Drift** how far they wander.
+  The drift is periodic over the loop, so it animates and exports
+  seamlessly; blob placement re-rolls with **Randomize**.
 - **Color** — front (red), back (blue), sparkle accent, and background.
 - **Play / Pause** toggles the loop (pausing freezes the current pose);
   **Randomize** re-seeds and rolls new shape parameters.
