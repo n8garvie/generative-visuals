@@ -51,7 +51,7 @@
     { key: 'rotX', label: 'Rotate X', min: -180, max: 180, step: 1, def: -20, group: 'view' },
     { key: 'rotY', label: 'Rotate Y', min: -180, max: 180, step: 1, def: 30, group: 'view' },
     { key: 'rotZ', label: 'Rotate Z', min: -180, max: 180, step: 1, def: 10, group: 'view' },
-    { key: 'zoom', label: 'Zoom', min: 0.3, max: 2.5, step: 0.01, def: 1.1, group: 'view' },
+    { key: 'zoom', label: 'Zoom', min: 0.1, max: 3, step: 0.01, def: 1.1, group: 'view' },
 
     { key: 'copies', label: 'Copies', min: 1, max: 5, step: 1, def: 1, group: 'copies' },
     { key: 'spread', label: 'Spread', min: 0, max: 0.6, step: 0.01, def: 0.3, group: 'copies' },
@@ -94,7 +94,7 @@
     ellipse: {
       lobesU: 0, lobesV: 0, amp: 0, smooth: 0, twist: 0, sx: 0.27, sy: 0.3, sz: 1.35,
       rotX: 0, rotY: 0, rotZ: 0, zoom: 1.35,
-      copies: 3, spread: 0.31, rotStep: 0, scaleStep: 1.05, alternate: true, sparkle: 0, mirror: 'off',
+      copies: 3, spread: 0.23, rotStep: 0, scaleStep: 1.05, alternate: true, sparkle: 0, mirror: 'off',
       density: 540, gridRatio: 1, dotSize: 1.3, dotAlpha: 0.8, jitter: 3,
       chromaOff: 8, chromaAngle: 160, depthTint: 0.15, gradAmt: 0.35, gradAngle: 75,
     },
@@ -342,10 +342,14 @@
     const colA = $('colorA').value;
     const colB = $('colorB').value;
 
+    // Spread scales with zoom so zooming out pulls the whole composition
+    // back like a camera — otherwise outer copies sit at fixed pixel
+    // offsets and can never be brought into frame.
+    const zoomAll = p.zoom * (mod.zoomMul ?? 1);
     for (let c = 0; c < copies; c++) {
-      const cx = W / 2 + (c - (copies - 1) / 2) * p.spread * W;
+      const cx = W / 2 + (c - (copies - 1) / 2) * p.spread * W * zoomAll;
       const rotY = p.rotY + (mod.swayY ?? 0) + p.rotStep * c;
-      const zoom = p.zoom * (mod.zoomMul ?? 1) * Math.pow(p.scaleStep, c);
+      const zoom = zoomAll * Math.pow(p.scaleStep, c);
       const swap = alternate && c % 2 === 1;
       drawSurface(offCtx, p, rnd, preview, cx, rotY, zoom, swap ? colB : colA, swap ? colA : colB, mod);
     }
